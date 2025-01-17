@@ -39,7 +39,6 @@ ReentrancyGuardUpgradeable {
     mapping(uint256 => mapping(address => UserInfo)) public userInfo;
 
     // User list
-    EnumerableSet.AddressSet private userAddrList;
     mapping(uint256 => EnumerableSet.AddressSet) private poolUserList;
 
     /// @notice Emitted when user deposit assets
@@ -77,9 +76,7 @@ ReentrancyGuardUpgradeable {
     /// @param _rewardIndex The reward token index
     /// @param _newTokenRate Token rate per block
     function setPoolTokenRate(uint256 _pid, uint256 _rewardIndex,
-        uint256 _newTokenRate) public onlyOwner {
-
-        require(_pid >= 0, "Farm: invalid new pool pid");
+        uint256 _newTokenRate) external onlyOwner {
 
         // update the pool
         updateMassPools();
@@ -92,7 +89,7 @@ ReentrancyGuardUpgradeable {
 
     /// @notice Set the farm start timestamp
     /// @param _startTime The farm start timestamp(seconds)
-    function setStartTime(uint256 _startTime) public onlyOwner {
+    function setStartTime(uint256 _startTime) external onlyOwner {
         require(startTime == 0, "Farm: already started");
         require(_startTime > block.timestamp, "Farm: start timestamp must be in the future");
         require(_startTime <= block.timestamp + 30 days, "Farm: start timestamp too far in the future");
@@ -103,13 +100,13 @@ ReentrancyGuardUpgradeable {
 
     /// @notice Set CORE token address
     /// @param _core The wrapped CORE
-    function setCoreAddress(address _core) public onlyOwner {
+    function setCoreAddress(address _core) external onlyOwner {
         coreAddress = _core;
         emit EventSetCoreAddress(_core);
     }
 
     /// @notice Get total user revenue
-    function getTotalUserRevenue() public view returns (UserRevenueInfoModel[] memory) {
+    function getTotalUserRevenue() external view returns (UserRevenueInfoModel[] memory) {
 
         address[] memory rewardTokenList = rewardTokenSet.values();
 
@@ -137,10 +134,11 @@ ReentrancyGuardUpgradeable {
         PoolInfoModel storage pool = poolInfoList[_pid];
 
         uint256 amount = user.amount;
+        uint poolRewardLen = pool.rewards.length;
 
-        UserRewardInfoModel[] memory userRewardInfo = new UserRewardInfoModel[](pool.rewards.length);
+        UserRewardInfoModel[] memory userRewardInfo = new UserRewardInfoModel[](poolRewardLen);
 
-        for (uint i = 0; i < pool.rewards.length; i++) {
+        for (uint i = 0; i < poolRewardLen; i++) {
             userRewardInfo[i] = UserRewardInfoModel({
                 token: pool.rewards[i].token,
                 debt: user.rewardDebt[pool.rewards[i].token]
@@ -153,7 +151,7 @@ ReentrancyGuardUpgradeable {
     /// @notice Get user information for all deposited pools
     /// @param _user The user address
     /// @return The pool user info
-    function getUserDepositedPools(address _user) public view returns (DepositedPoolUserInfoModel[] memory){
+    function getUserDepositedPools(address _user) external view returns (DepositedPoolUserInfoModel[] memory){
         DepositedPoolUserInfoModel[] memory poolUserInfoList = new DepositedPoolUserInfoModel[](poolInfoList.length);
 
         for (uint i = 0; i < poolInfoList.length; i++) {
@@ -171,7 +169,7 @@ ReentrancyGuardUpgradeable {
     /// @notice Get pool information
     /// @param _pid The pool id
     /// @return The pool presentation info
-    function getPoolInfo(uint256 _pid) public view returns (PoolInfoUIModel memory){
+    function getPoolInfo(uint256 _pid) external view returns (PoolInfoUIModel memory){
         PoolInfoModel storage pool = poolInfoList[_pid];
 
         PoolInfoUIModel memory poolModel;
@@ -181,10 +179,13 @@ ReentrancyGuardUpgradeable {
         poolModel.amount = pool.amount;
         poolModel.lastRewardTime = pool.lastRewardTime;
         poolModel.vault = pool.vault;
-        poolModel.rewards = new RewardInfoModel[](pool.rewards.length);
-        poolModel.acctPerShare = new AcctPerShareInfo[](pool.rewards.length);
 
-        for (uint i = 0; i < pool.rewards.length; i++) {
+        uint poolRewardLen = pool.rewards.length;
+
+    poolModel.rewards = new RewardInfoModel[](poolRewardLen);
+        poolModel.acctPerShare = new AcctPerShareInfo[](poolRewardLen);
+
+        for (uint i = 0; i < poolRewardLen; i++) {
             poolModel.rewards[i] = RewardInfoModel({
                 token: pool.rewards[i].token,
                 tokenRate: pool.rewards[i].tokenRate
@@ -219,7 +220,7 @@ ReentrancyGuardUpgradeable {
     }
 
     /// @notice Get total TVL
-    function getTotalTvl() public view returns (PoolTVLModel[] memory){
+    function getTotalTvl() external view returns (PoolTVLModel[] memory){
         uint256 _len = poolInfoList.length;
         PoolTVLModel[] memory _totalPoolTvl = new PoolTVLModel[](_len);
 
@@ -271,7 +272,7 @@ ReentrancyGuardUpgradeable {
         // increase total alloc point
         totalAllocPoint += _allocPoints;
 
-        if (_isNative == false) {
+        if (!_isNative) {
             IERC20(_token).approve(address(_vault), 0);
             IERC20(_token).approve(address(_vault), type(uint256).max);
         }
@@ -442,9 +443,11 @@ ReentrancyGuardUpgradeable {
 
         PoolInfoModel storage pool = poolInfoList[_pid];
 
-        UserRewardInfoModel[] memory userPendingRewards = new UserRewardInfoModel[](pool.rewards.length);
+        uint poolRewardLen = pool.rewards.length;
 
-        for (uint i = 0; i < pool.rewards.length; i++) {
+        UserRewardInfoModel[] memory userPendingRewards = new UserRewardInfoModel[](poolRewardLen);
+
+        for (uint i = 0; i < poolRewardLen; i++) {
             IERC20 rewardToken = pool.rewards[i].token;
 
             uint256 pendingRewards = getUserPendingRewardToken(_pid, _user, rewardToken);
@@ -489,7 +492,9 @@ ReentrancyGuardUpgradeable {
 
         PoolInfoModel storage pool = poolInfoList[_pid];
 
-        for (uint i = 0; i < pool.rewards.length; i++) {
+        uint poolRewardLen = pool.rewards.length;
+
+        for (uint i = 0; i < poolRewardLen; i++) {
             require(address(pool.rewards[i].token) != address(0), "invalid pool reward token");
         }
 
@@ -521,7 +526,7 @@ ReentrancyGuardUpgradeable {
         }
 
         if (user.amount > 0) {
-            for (uint i = 0; i < pool.rewards.length; i++) {
+            for (uint i = 0; i < poolRewardLen; i++) {
                 IERC20 rewardToken = pool.rewards[i].token;
                 user.rewardDebt[rewardToken] = user.amount * (pool.acctPerShare[rewardToken]) / (1e18);
             }
@@ -548,7 +553,9 @@ ReentrancyGuardUpgradeable {
 
         PoolInfoModel storage pool = poolInfoList[_pid];
 
-        for (uint i = 0; i < pool.rewards.length; i++) {
+        uint poolRewardLen = pool.rewards.length;
+
+        for (uint i = 0; i < poolRewardLen; i++) {
             require(address(pool.rewards[i].token) != address(0), "invalid pool reward token");
         }
 
@@ -565,7 +572,7 @@ ReentrancyGuardUpgradeable {
             pool.amount = pool.amount - _amount;
         }
 
-        for (uint i = 0; i < pool.rewards.length; i++) {
+        for (uint i = 0; i < poolRewardLen; i++) {
             IERC20 rewardToken = pool.rewards[i].token;
             user.rewardDebt[rewardToken] = user.amount * (pool.acctPerShare[rewardToken]) / (1e18);
         }

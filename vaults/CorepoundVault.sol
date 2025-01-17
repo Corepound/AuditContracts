@@ -9,9 +9,11 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 contract CorepoundVault is ICorepoundVault, Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
     // @dev Amount of underlying tokens provided by the user.
     struct VaultUserInfo {
@@ -37,7 +39,7 @@ contract CorepoundVault is ICorepoundVault, Initializable, OwnableUpgradeable, R
     mapping(address => VaultUserInfo) public userInfoMap;
 
     // User list
-    address[] public userList;
+    EnumerableSet.AddressSet private userList;
 
     /// @notice Emitted when user deposit assets
     /// @param user Address that deposited
@@ -81,7 +83,16 @@ contract CorepoundVault is ICorepoundVault, Initializable, OwnableUpgradeable, R
     /// @notice Set vault strategy
     /// @param _strategy Strategy address
     function setVaultStrategy(ICorepoundStrategy _strategy) external onlyOwner {
+        ICorepoundStrategy oldStrategy = strategy;
+
+        // Update
         strategy = _strategy;
+
+        if (address(oldStrategy) != address(0)) {
+            if (address(assets) != coreAddress) {
+                IERC20(assets).approve(address(oldStrategy), 0);
+            }
+        }
 
         if (address(_strategy) != address(0)) {
             if (address(assets) != coreAddress) {
@@ -103,22 +114,6 @@ contract CorepoundVault is ICorepoundVault, Initializable, OwnableUpgradeable, R
         farmAddress = _farmAddr;
 
         emit EventSetMainChef(address(_farmAddr));
-    }
-
-    /// @notice Set CORE address
-    /// @param _coreAddress CORE address
-    function setCoreAddress(address _coreAddress) external onlyOwner {
-        coreAddress = _coreAddress;
-
-        emit EventSetCoreAddress(_coreAddress);
-    }
-
-    /// @notice Set the assets of the vault
-    /// @param _assets The assets of the vault
-    function setAssets(address _assets) external onlyOwner {
-        assets = IERC20(_assets);
-
-        emit EventSetAssets(address(_assets));
     }
 
     /// @notice Return vault pool balance only (strategy balance not included)
@@ -145,7 +140,8 @@ contract CorepoundVault is ICorepoundVault, Initializable, OwnableUpgradeable, R
 
     /// @notice Return users list that interact with the vault
     function getVaultUserList() public view returns (address[] memory) {
-        return userList;
+        address[] memory _userList = userList.values();
+        return _userList;
     }
 
     /// @notice Deposit assets to the vault
@@ -166,7 +162,7 @@ contract CorepoundVault is ICorepoundVault, Initializable, OwnableUpgradeable, R
             _depositAmount = _deposit(_userAddr, farmAddress, _amount);
         }
 
-        userList.push(_userAddr);
+        userList.add(_userAddr);
         emit EventDepositTokenToVault(_userAddr, _depositAmount);
 
         return _depositAmount;
