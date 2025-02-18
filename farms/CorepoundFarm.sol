@@ -17,6 +17,8 @@ ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
 
+    uint256 constant assetDecimal = 1e18;
+
     // Farm start timestamp
     uint256 public startTime;
 
@@ -182,7 +184,7 @@ ReentrancyGuardUpgradeable {
 
         uint poolRewardLen = pool.rewards.length;
 
-    poolModel.rewards = new RewardInfoModel[](poolRewardLen);
+        poolModel.rewards = new RewardInfoModel[](poolRewardLen);
         poolModel.acctPerShare = new AcctPerShareInfo[](poolRewardLen);
 
         for (uint i = 0; i < poolRewardLen; i++) {
@@ -286,6 +288,8 @@ ReentrancyGuardUpgradeable {
 
 
         for (uint i = 0; i < _rewards.length; i++) {
+            require(address(_rewards[i].token) != address(0), "Invalid rewardToken");
+
             newPool.rewards.push(_rewards[i]);
             newPool.acctPerShare[_rewards[i].token] = 0;
             rewardTokenSet.add(address(_rewards[i].token));
@@ -340,6 +344,7 @@ ReentrancyGuardUpgradeable {
 
         for (uint256 i = 0; i < rewardLength; i++) {
             if (pool.rewards[i].token == _removingToken) {
+                pool.acctPerShare[pool.rewards[i].token] = 0;
                 pool.rewards[i] = pool.rewards[rewardLength - 1];
                 pool.rewards.pop();
 
@@ -399,7 +404,7 @@ ReentrancyGuardUpgradeable {
             RewardInfoModel memory reward = pool.rewards[i];
 
             uint256 tokenReward = multiplier * (reward.tokenRate) * (pool.allocPoint) / (totalAllocPoint);
-            pool.acctPerShare[reward.token] = pool.acctPerShare[reward.token] + (tokenReward * 1e18 / totalAmount);
+            pool.acctPerShare[reward.token] = pool.acctPerShare[reward.token] + (tokenReward * assetDecimal / totalAmount);
         }
 
         pool.lastRewardTime = block.timestamp;
@@ -424,13 +429,13 @@ ReentrancyGuardUpgradeable {
                 if (pool.rewards[i].token == _rewardToken) {
                     RewardInfoModel memory rewardInfo = pool.rewards[i];
                     tokenReward = multiplier * (rewardInfo.tokenRate) * (pool.allocPoint) / (totalAllocPoint);
-                    acctPerShare = acctPerShare + (tokenReward * 1e18 / totalAmount);
+                    acctPerShare = acctPerShare + (tokenReward * assetDecimal / totalAmount);
                     break;
                 }
             }
         }
 
-        uint256 reward = user.amount * acctPerShare / 1e18;
+        uint256 reward = user.amount * acctPerShare / assetDecimal;
         uint256 _pendingRewards = reward > user.rewardDebt[_rewardToken] ? reward - (user.rewardDebt[_rewardToken]) : 0;
         return _pendingRewards;
     }
@@ -510,7 +515,7 @@ ReentrancyGuardUpgradeable {
         // process Native
         if (address(pool.assets) == coreAddress) {
             if (msg.value > 0) {
-                _amount = _amount + msg.value;
+                _amount = msg.value;
             }
         } else {
             require(msg.value == 0, "Deposit invalid token");
@@ -528,7 +533,7 @@ ReentrancyGuardUpgradeable {
         if (user.amount > 0) {
             for (uint i = 0; i < poolRewardLen; i++) {
                 IERC20 rewardToken = pool.rewards[i].token;
-                user.rewardDebt[rewardToken] = user.amount * (pool.acctPerShare[rewardToken]) / (1e18);
+                user.rewardDebt[rewardToken] = user.amount * (pool.acctPerShare[rewardToken]) / (assetDecimal);
             }
         }
 
@@ -574,7 +579,7 @@ ReentrancyGuardUpgradeable {
 
         for (uint i = 0; i < poolRewardLen; i++) {
             IERC20 rewardToken = pool.rewards[i].token;
-            user.rewardDebt[rewardToken] = user.amount * (pool.acctPerShare[rewardToken]) / (1e18);
+            user.rewardDebt[rewardToken] = user.amount * (pool.acctPerShare[rewardToken]) / (assetDecimal);
         }
 
         pool.vault.withdrawTokenFromVault(msg.sender, _amount);
